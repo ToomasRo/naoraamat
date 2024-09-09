@@ -14,6 +14,7 @@ config: dict = {
     # **os.environ,  # override loaded values with environment variables
 }
 
+
 def make_session():
     sess = requests.Session()
     ua = {
@@ -47,17 +48,17 @@ def make_session():
 
     return sess
 
-def get_liikmete_nimekiri(sess:requests.Session)->list[Tuple]:
+
+def get_liikmete_nimekiri(sess: requests.Session) -> list[Tuple]:
     """Parsib siseveebi leheküljelt kõik siseveebis olevate liikmete pildid.
     Isiku url on kujul"/?q=nimekiri/isik/1".
     Isiku nimi on Perenimi, Eesnimi
 
     :param requests.Session sess: sisselogitud sessioon
     :return list[Tuple]: list, kus on [(isiku url, isiku nimi), ...]
-    """    
+    """
     nimekiri = sess.get("https://uus.eys.ee/?q=nimekiri")
     soup_nimekiri = BeautifulSoup(nimekiri.content, "lxml")
-    
 
     liikmed = []
     tabel: bs4.element.Tag | bs4.NavigableString | None = soup_nimekiri.find("tbody")
@@ -71,14 +72,14 @@ def get_liikmete_nimekiri(sess:requests.Session)->list[Tuple]:
 
     return liikmed
 
-def get_liikme_pildid(sess:requests.Session, url:str)->list:
-    
+
+def get_liikme_pildid(sess: requests.Session, url: str) -> list:
+
     profiil_id = url.split("/")[-1]
 
     profiil = sess.get(f"https://uus.eys.ee/?q=pildid/lisa/{profiil_id}/nimekiri")
 
     soup_profiil = BeautifulSoup(profiil.content, "lxml")
- 
 
     persons_images = []
     for image_source in soup_profiil.find_all("img"):
@@ -86,13 +87,17 @@ def get_liikme_pildid(sess:requests.Session, url:str)->list:
         persons_images.append(image_source["src"])
     return persons_images
 
-def download_liikme_pildid(sess:requests.Session, urlid, nimi)->None:
-    os.mkdir(f"./backend/data/siseveeb/{nimi}")
 
+def download_liikme_pildid(sess: requests.Session, urlid, nimi) -> None:
+    if not os.path.exists(f"./backend/data/siseveeb/{nimi}"):
+        os.mkdir(f"./backend/data/siseveeb/{nimi}")
+    else:
+        # fix kui on mitu sama nimega selli..., eeldab et skripti jooksutad ainult korra
+        os.mkdir(f"./backend/data/siseveeb/{nimi}2")
 
     for idx, img_url in enumerate(urlid):
         img_data = sess.get(img_url, allow_redirects=True).content
-            
+
         with open(f"backend/data/siseveeb/{nimi}/{idx}.jpg", "wb") as handler:
             handler.write(img_data)
         sleep(1)
@@ -107,13 +112,13 @@ if __name__ == "__main__":
     liikmete_nimekiri = get_liikmete_nimekiri(sess)
 
     for liige in liikmete_nimekiri:
-        (liikme_url, liikme_nimi) = liige # type:ignore
+        (liikme_url, liikme_nimi) = liige  # type:ignore
         print(liikme_nimi)
         print("\t", liikme_url)
 
         pildi_urlid = get_liikme_pildid(sess, liikme_url)
         print("\t", pildi_urlid)
-        
+
         if len(pildi_urlid) == 0:
             continue
 
