@@ -1,0 +1,21 @@
+path:
+  data: /data/data
+  logs: /data/log
+  plugins: /data/plugins
+  work: /data/work
+
+
+cluster.name: "docker-cluster"
+network.host: 0.0.0.0
+
+
+http.cors.allow-origin: "/.*/"
+http.cors.enabled: true
+
+http.port: 9200
+
+http.max_content_length: 1200mb
+
+discovery.type: single-node
+
+xpack.license.self_generated.type: basic

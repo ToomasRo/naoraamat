@@ -38,3 +38,4 @@ backend/models
 
 *.env
 
+Pipfile.lock

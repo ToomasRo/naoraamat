@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+opencv-python = "*"
+numpy = "*"
+pandas = "*"
+scipy = "*"
+fastapi = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+dlib = "*"
+elasticsearch = "*"
+
+[dev-packages]
+pyperclip = "*"
+
+[requires]
+python_version = "3.10"

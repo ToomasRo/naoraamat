@@ -1,0 +1,1 @@
+elasticsearch.ssl.verificationMode: "none"

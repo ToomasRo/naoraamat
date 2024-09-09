@@ -1,0 +1,63 @@
+services:
+  minubackend:
+    container_name: fastapi-application
+    build: 
+      context: ./backend
+      dockerfile: ./Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+    networks:
+      - minunet
+
+    # restart: "no"
+
+
+  seltsielastic:
+    container_name: minuelastic
+    build:
+      context: ./database
+      dockerfile: ./elastic.Dockerfile
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports: 
+      - 9200:9200
+      - 9300:9300
+    networks:
+      - minunet
+  
+  seltsikibana:
+    container_name: minukibana
+    build:
+      context: ./database
+      dockerfile: ./kibana.Dockerfile
+    environment:
+      - ELASTICSEARCH_HOSTS=http://minuelastic:9200
+    ports:
+      - 5601:5601
+    networks:
+      - minunet
+    # depends_on:
+    #   healthcheck:
+    #     test: curl -s http://minuelastic:9200 >/dev/null || exit 1
+    #     interval: 30s
+    #     timeout: 10s
+    #     retries: 50
+  
+
+
+  # ilusfront:
+  #   container_name: lmaofront
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: ./Dockerfile
+
+  #   networks:
+  #     - minunet
+
+
+networks:
+  minunet:
+    driver: bridge
