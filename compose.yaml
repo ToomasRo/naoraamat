@@ -1,6 +1,143 @@
+# version: "3.9"
+
+networks:
+  elastic:
+    driver: bridge
+
+volumes:
+  elastic:
+  elastic-certs:
+  kibana:
+
 services:
+
+  elastic-setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    networks:
+      - elastic
+    volumes:
+      - elastic-certs:/usr/share/elasticsearch/config/certs
+    user: "0"
+    command: >
+      bash -c '
+        if [ x${ELASTIC_PASSWORD} == x ]; then
+          echo "Set the ELASTIC_PASSWORD environment variable in the .env file";
+          exit 1;
+        elif [ x${KIBANA_PASSWORD} == x ]; then
+          echo "Set the KIBANA_PASSWORD environment variable in the .env file";
+          exit 1;
+        fi;
+        if [ ! -f config/certs/ca.zip ]; then
+          echo "Creating CA";
+          bin/elasticsearch-certutil ca --silent --pem -out config/certs/ca.zip;
+          unzip config/certs/ca.zip -d config/certs;
+        fi;
+        if [ ! -f config/certs/certs.zip ]; then
+          echo "Creating certs";
+          echo -ne \
+          "instances:\n"\
+          "  - name: elastic\n"\
+          "    dns:\n"\
+          "      - elastic\n"\
+          "      - localhost\n"\
+          "      - host.internal.docker\n"\
+          "    ip:\n"\
+          "      - 127.0.0.1\n"\
+          > config/certs/instances.yml;
+          bin/elasticsearch-certutil cert --silent --pem -out config/certs/certs.zip --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key;
+          unzip config/certs/certs.zip -d config/certs;
+        fi;
+        echo "Setting file permissions"
+        chown -R root:root config/certs;
+        find . -type d -exec chmod 750 \{\} \;;
+        find . -type f -exec chmod 640 \{\} \;;
+        echo "Waiting for Elasticsearch availability";
+        until curl -s --cacert config/certs/ca/ca.crt https://elastic:9200 | grep -q "missing authentication credentials"; do sleep 30; done;
+        echo "Setting kibana_system password";
+        until curl -s -X POST --cacert config/certs/ca/ca.crt -u "elastic:${ELASTIC_PASSWORD}" -H "Content-Type: application/json" https://elastic:9200/_security/user/kibana_system/_password -d "{\"password\":\"${KIBANA_PASSWORD}\"}" | grep -q "^{}"; do sleep 10; done;
+        echo "All done!";
+      '
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f config/certs/elastic/elastic.crt ]"]
+      interval: 1s
+      timeout: 5s
+      retries: 120
+
+  elastic:
+    depends_on:
+      elastic-setup:
+        condition: service_healthy
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    networks:
+      - elastic
+    volumes:
+      - elastic-certs:/usr/share/elasticsearch/config/certs
+      - elastic:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    environment:
+      - node.name=elastic
+      - cluster.name=elastic-cluster
+      - cluster.initial_master_nodes=elastic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=certs/elastic/elastic.key
+      - xpack.security.http.ssl.certificate=certs/elastic/elastic.crt
+      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/elastic/elastic.key
+      - xpack.security.transport.ssl.certificate=certs/elastic/elastic.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.license.self_generated.type=basic
+    mem_limit: 1GB
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  kibana:
+    depends_on:
+      elastic:
+        condition: service_healthy
+    image: docker.elastic.co/kibana/kibana:8.15.0
+    networks:
+      - elastic
+    volumes:
+      - elastic-certs:/usr/share/kibana/config/certs
+      - kibana:/usr/share/kibana/data
+    ports:
+      - 5601:5601
+    environment:
+      - SERVERNAME=kibana
+      - ELASTICSEARCH_HOSTS=https://elastic:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
+      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=config/certs/ca/ca.crt
+    mem_limit: 1GB
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
   minubackend:
-    container_name: fastapi-application
+    container_name: fastapi
     build: 
       context: ./backend
       dockerfile: ./Dockerfile
@@ -9,55 +146,6 @@ services:
     environment:
       PORT: 8000
     networks:
-      - minunet
-
-    # restart: "no"
-
-
-  seltsielastic:
-    container_name: minuelastic
-    build:
-      context: ./database
-      dockerfile: ./elastic.Dockerfile
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-    ports: 
-      - 9200:9200
-      - 9300:9300
-    networks:
-      - minunet
-  
-  seltsikibana:
-    container_name: minukibana
-    build:
-      context: ./database
-      dockerfile: ./kibana.Dockerfile
-    environment:
-      - ELASTICSEARCH_HOSTS=http://minuelastic:9200
-    ports:
-      - 5601:5601
-    networks:
-      - minunet
-    # depends_on:
-    #   healthcheck:
-    #     test: curl -s http://minuelastic:9200 >/dev/null || exit 1
-    #     interval: 30s
-    #     timeout: 10s
-    #     retries: 50
-  
-
-
-  # ilusfront:
-  #   container_name: lmaofront
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: ./Dockerfile
-
-  #   networks:
-  #     - minunet
-
-
-networks:
-  minunet:
-    driver: bridge
+      - elastic
+    volumes:
+      - elastic-certs:/usr/share/ca-certificates

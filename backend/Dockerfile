@@ -8,14 +8,18 @@ apt-get install -y --no-install-recommends \
     build-essential \
     git \
     cmake \
-    make
-
+    make \
 EOF
+
+
+# COPY /usr/share/config/certs /usr/share/ca-certificates
+# COPY /usr/share/config/certs/elastic/elastic.crt /usr/share/ca-certificates/elastic.crt
+# RUN update-ca-certificates
 
 COPY Pipfile ./
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install pipenv 
+    pip install --no-cache-dir pipenv 
 RUN pipenv install
 
 COPY ./app ./app
