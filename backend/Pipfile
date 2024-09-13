@@ -12,9 +12,17 @@ fastapi = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 dlib = "*"
 elasticsearch = "*"
+python-dotenv = "*"
+requests = "*"
+google-api-core = "*"
+google-api-python-client = "*"
+google-auth-httplib2 = "*" 
+google-auth-oauthlib = "*"
 
 [dev-packages]
 pyperclip = "*"
+beautifulsoup4 = "*"
+lxml = "*"
 
 [requires]
 python_version = "3.10"
