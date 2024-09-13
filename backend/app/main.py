@@ -1,11 +1,24 @@
-from http import client
-from urllib import response
-from fastapi import FastAPI
-from utils import scan_known_faces_to_elastic, scan_unknown
-from fastapi.middleware.cors import CORSMiddleware
-
-from elasticsearch import Elasticsearch
 import os
+import time
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+
+from utils.EShelper import ESclient
+from utils.EShelper import (
+    search_elastic_siseveeb,
+    search_elastic_sarnased,
+    create_named_index,
+    delete_index,
+    upload_named_face_to_elastic,
+    create_unnamed_index,
+    upload_to_elastic,
+)
+
+from utils import scan_known_faces_to_elastic, scan_unknown
+
 
 # TODO remove before prod
 import urllib3
@@ -16,7 +29,9 @@ from elasticsearch.exceptions import ElasticsearchWarning
 
 warnings.simplefilter("ignore", ElasticsearchWarning)
 
+
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="./data", html=True), name="static")
 
 
 # TODO decide what frontend
@@ -30,12 +45,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ESclient = Elasticsearch(
-    "https://host.docker.internal:9200",
-    api_key="d3c4SzI1RUI5TUpaRnl6V0U5UEE6aVlNZG9LVG1SVzIyZnZvUjVvaGROdw==",
-    verify_certs=False,
-)
-
 
 @app.get("/")
 def hello_world():
@@ -44,17 +53,14 @@ def hello_world():
 
 @app.get("/create-index")
 def create_index():
-    ret = scan_known_faces_to_elastic.create_index(ESclient)
+    ret = create_named_index(ESclient)
     return {"message": f"{ret}"}
 
 
 @app.get("/delete-index")
 def delete_index():
-    ret = scan_known_faces_to_elastic.delete_index(ESclient, "named-index")
+    ret = delete_index(ESclient, "named-index")
     return {"message": f"{ret}"}
-
-
-import time
 
 
 @app.get("/ingest-siseveeb")
@@ -76,7 +82,7 @@ def ingest_siseveeb():
             x2 = int(result[0].br_corner().x)
             y2 = int(result[0].br_corner().y)
 
-            res2 = scan_known_faces_to_elastic.upload_to_elastic(
+            res2 = upload_named_face_to_elastic(
                 ESclient,
                 index="named-index",
                 face_vector=list(result[2]),
@@ -90,28 +96,9 @@ def ingest_siseveeb():
     return {"message": f"{time.time()-start}"}
 
 
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-
-app.mount("/static", StaticFiles(directory="./data", html=True), name="static")
-
-
 @app.get("/find_siseveeb")
-def find_seltsivend(first=str, last=str, response_class=HTMLResponse):
-    resp = ESclient.search(
-        index="named-index",
-        query={
-            "bool": {
-                "should": [
-                    {"match": {"first_name": first}},
-                    {"match": {"last_name": last}},
-                ],
-                "minimum_should_match": 2,
-            }
-        },
-        track_total_hits=True,
-        # source_includes=["face_vector"],
-    )
+def find_seltsivend(first=str, last=str):
+    resp = search_elastic_siseveeb(first, last)
 
     face_vectors = []
     for doc in resp["hits"]["hits"]:
@@ -161,19 +148,7 @@ def find_seltsivend(first=str, last=str, response_class=HTMLResponse):
 @app.get("/find")
 def find_seltsivend_sarnased(first=str, last=str):
 
-    resp = ESclient.search(
-        index="named-index",
-        query={
-            "bool": {
-                "should": [
-                    {"match": {"first_name": first}},
-                    {"match": {"last_name": last}},
-                ],
-                "minimum_should_match": 2,
-            }
-        },
-        track_total_hits=True,
-    )
+    resp = search_elastic_sarnased(first, last)
 
     face_vectors = []
     for doc in resp["hits"]["hits"]:
@@ -211,7 +186,7 @@ def find_seltsivend_sarnased(first=str, last=str):
     print(f"Andmebaasist tuvastasime {len(score_and_loc)}")
     print(score_and_loc)
     response_html = [
-        f'''<!DOCTYPE html>\n<html>  <head><title>Photos</title></head><body><h1>Imelise {first} {last} pildid:</h1><div class="photo">'''
+        f"""<!DOCTYPE html>\n<html>  <head><title>Photos</title></head><body><h1>Imelise {first} {last} pildid:</h1><div class="photo">"""
     ]
     ensure_unique = set()
     for _, loc in score_and_loc:
@@ -226,14 +201,16 @@ def find_seltsivend_sarnased(first=str, last=str):
 
 @app.get("/create-unnamed")
 def create_index_gdrive():
-    ret = scan_unknown.create_index(ESclient)
+    ret = create_unnamed_index(ESclient)
     return {"message": f"{ret}"}
 
 
 @app.get("/ingest-local")
 def ingest_local():
     start = time.time()
-    for asi in scan_unknown.directory_traversal("./data/pildid/reduced/2024-l/Volber - Heino Pärn"):
+    for asi in scan_unknown.directory_traversal(
+        "./data/pildid/reduced/2024-l/Volber - Heino Pärn"
+    ):
         print(asi)
         result = scan_unknown.process_image_multiple_faces(
             os.path.join(*asi)
@@ -241,14 +218,14 @@ def ingest_local():
         if result != 0:
             for res in result:
                 print(res[0], res[2][0])
-                
-                res2 = scan_unknown.upload_to_elastic(
+
+                res2 = upload_to_elastic(
                     ESclient,
                     index="unnamed",
                     face_vector=list(res[2]),
                     image_loc=os.path.join(*asi),
                     face_loc_img=res[0],
-                    scale_factor=0.5
+                    scale_factor=0.5,
                 )
                 print(res2)
 

@@ -1,4 +1,3 @@
-from ast import Break
 from elasticsearch import Elasticsearch
 import dlib
 import os
@@ -86,49 +85,6 @@ def process_image_multiple_faces(
         idx += 1
 
     return result
-
-
-def upload_to_elastic(
-    ESclient: Elasticsearch,
-    index,
-    face_vector,
-    image_loc,
-    face_loc_img,
-    scale_factor=1.0,
-):
-    resp1 = ESclient.index(
-        index=index,
-        document={
-            "face_vector": face_vector,
-            "face_location_in_image": face_loc_img,
-            "image_location": image_loc,
-            "scale_factor": scale_factor,
-        },
-    )
-    return resp1
-
-
-def create_index(client: Elasticsearch):
-    settings = {"index.default_pipeline": "ingest_with_dates"}
-
-    client.ingest.put_pipeline(
-        id="ingest_with_dates",
-        processors=[{"set": {"field": "created_at", "value": "{{_ingest.timestamp}}"}}],
-    )
-
-    resp = client.indices.create(
-        index="unnamed",
-        mappings={
-            "properties": {
-                "face_vector": {"type": "dense_vector", "dims": 128},
-                "face_location_in_image": {"type": "keyword"},
-                "image_location": {"type": "text"},
-                "scale_factor": {"type": "float"},
-            }
-        },
-        settings=settings,
-    )
-    return resp
 
 
 if __name__ == "__main__":
