@@ -137,15 +137,31 @@ services:
       retries: 120
 
   minubackend:
-    container_name: fastapi
+    container_name: server
     build: 
       context: ./backend
-      dockerfile: ./Dockerfile
+      dockerfile: ./backend.Dockerfile
     ports:
       - "8000:8000"
     environment:
-      PORT: 8000
+      - PORT=8000
+      - DISPLAY=":1"
     networks:
       - elastic
     volumes:
-      - elastic-certs:/usr/share/ca-certificates
+      - ./backend/app:/app/app
+      - ./backend/utils:/app/utils
+      - ./backend/models:/app/models
+      - ./backend/data/siseveeb:/app/data/siseveeb
+      - ./backend/data/pildid/reduced:/app/data/pildid/reduced
+      - ./backend/certs:/app/certs
+      - /tmp/.X11-unix:/tmp/.X11-unix # et imshow töötaks
+    #   - elastic-certs:/usr/share/ca-certificates
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: ./app
+        - action: sync
+          path: ./utils
+          target: ./utils
