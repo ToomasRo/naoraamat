@@ -6,15 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from utils import EShelper
 from utils.EShelper import ESclient
 from utils.EShelper import (
     search_elastic_siseveeb,
     search_elastic_sarnased,
     create_named_index,
-    delete_index,
     upload_named_face_to_elastic,
     create_unnamed_index,
-    upload_to_elastic,
+    upload_unnamed_to_elastic,
 )
 
 from utils import scan_known_faces_to_elastic, scan_unknown
@@ -22,9 +22,9 @@ from utils import scan_known_faces_to_elastic, scan_unknown
 
 # TODO remove before prod
 import urllib3
+import warnings
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-import warnings
 from elasticsearch.exceptions import ElasticsearchWarning
 
 warnings.simplefilter("ignore", ElasticsearchWarning)
@@ -35,7 +35,12 @@ app.mount("/static", StaticFiles(directory="./data", html=True), name="static")
 
 
 # TODO decide what frontend
-origins = ["http://localhost:5173", "localhost:5173"]
+origins = [
+    "http://localhost:4200",
+    "localhost:4200",
+    "https://drive.google.com",
+    "https://play.google.com",
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,7 +64,7 @@ def create_index():
 
 @app.get("/delete-index")
 def delete_index():
-    ret = delete_index(ESclient, "named-index")
+    ret = EShelper.delete_index(ESclient, "named-index")
     return {"message": f"{ret}"}
 
 
@@ -167,7 +172,12 @@ def find_seltsivend_sarnased(first=str, last=str):
                     "k": 30,
                     "num_candidates": 200,
                 },
-                source_includes=["image_location"],
+                query={
+                    "bool": {
+                        "filter": {"term": {"version": "2"}},
+                    },
+                },
+                source_includes=["gdrive_id"],
                 source=False,
             )
         )
@@ -177,10 +187,17 @@ def find_seltsivend_sarnased(first=str, last=str):
         print(resp)
         print("----------------------------------------------")
         for r in resp["hits"]["hits"]:
-            # print(r["_score"])
-            img_src = r["_source"]["image_location"]
-            static_source = "/static/" + "/".join(img_src.split("/")[2:])
-            score_and_loc.append([r["_score"], static_source])
+            # esimene if on deprecated
+            if "image_location" in r["_source"]:
+                img_src = r["_source"]["image_location"]
+                static_source = "/static/" + "/".join(img_src.split("/")[2:])
+                score_and_loc.append([r["_score"], static_source])
+            elif "gdrive_id" in r["_source"]:
+                gdrive = r["_source"]["gdrive_id"]
+                static_source = f'<iframe src="https://drive.google.com/file/d/{gdrive}/preview" width="640" height="480"></iframe>'
+                score_and_loc.append([r["_score"], static_source])
+            else:
+                print(r["_source"])
 
     score_and_loc.sort(key=lambda x: x[0], reverse=True)
     print(f"Andmebaasist tuvastasime {len(score_and_loc)}")
@@ -190,10 +207,9 @@ def find_seltsivend_sarnased(first=str, last=str):
     ]
     ensure_unique = set()
     for _, loc in score_and_loc:
-        template = f'<img class="fit-picture" src="{loc}" style="width: 500px"/>'
-        if not template in ensure_unique:
-            ensure_unique.add(template)
-            response_html.append(template)
+        if not loc in ensure_unique:
+            ensure_unique.add(loc)
+            response_html.append(loc)
 
     response_html.append("</div>  </body></html>")
     return HTMLResponse(content="\n".join(response_html), status_code=200)
@@ -219,7 +235,7 @@ def ingest_local():
             for res in result:
                 print(res[0], res[2][0])
 
-                res2 = upload_to_elastic(
+                res2 = upload_unnamed_to_elastic(
                     ESclient,
                     index="unnamed",
                     face_vector=list(res[2]),

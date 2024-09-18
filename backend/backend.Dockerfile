@@ -42,6 +42,8 @@ FROM builder AS dev-envs
 # COPY --from=gloursdocker/docker / /
 
 # USER app
+COPY data.json ./
+COPY .env ./
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
