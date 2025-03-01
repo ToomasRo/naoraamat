@@ -105,7 +105,6 @@ def process_from_mount(filtuple):
             scale_factor=scale_factor,
         )
 
-
 # if __name__ == "__main__":
 #     filepath = os.path.join("gdrive/Suvepäevad/Suvepäevad - Heino Pärn", "2W6A7551.jpg")
 #     import json

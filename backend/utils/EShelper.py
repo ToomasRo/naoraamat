@@ -55,7 +55,7 @@ def upload_unnamed_to_elastic2(
     gdrive_id: str,
     human_friendly_loc: str,
     scale_factor=1.0,
-    version=2,
+    version=1,
 ):
     resp1 = ESclient.index(
         index=index,
@@ -139,7 +139,7 @@ def create_named_index(client: Elasticsearch):
                 "last_name": {"type": "text"},
                 "image_location": {"type": "text"},
                 "version": {"type": "long"},
-            }
+            } # TODO lisada AKORG:EYS defualtina
         },
         settings=settings,
     )

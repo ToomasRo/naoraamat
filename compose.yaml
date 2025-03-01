@@ -145,17 +145,18 @@ services:
       - "8000:8000"
     environment:
       - PORT=8000
-      - DISPLAY=":1"
     networks:
       - elastic
     volumes:
       - ./backend/app:/app/app
       - ./backend/utils:/app/utils
-      - ./backend/models:/app/models
+      - ./backend/scripts:/app/scripts
+      # - ./backend/models:/app/models
       - ./backend/data/siseveeb:/app/data/siseveeb
-      - ./backend/data/pildid/reduced:/app/data/pildid/reduced
-      - ./backend/certs:/app/certs
-      - /tmp/.X11-unix:/tmp/.X11-unix # et imshow töötaks
+      - ./backend/data/pildid:/app/data/pildid
+      # - ./backend/data/pildid/reduced:/app/data/pildid/reduced
+      # - ./backend/certs:/app/certs
+      # - /home/atlantis/gdrive/.shared/Eesti Üliõpilaste Seltsi pildid/2024-l:/app/gdrive
     #   - elastic-certs:/usr/share/ca-certificates
     develop:
       watch:

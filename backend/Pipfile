@@ -23,6 +23,7 @@ google-auth-oauthlib = "*"
 pyperclip = "*"
 beautifulsoup4 = "*"
 lxml = "*"
+tqdm = "*"
 
 [requires]
 python_version = "3.10"

@@ -1,3 +1,8 @@
+""" Piltidega töötlemised siin failis
+
+resize_to_fhdish -> võtab 4k pildi ja teeb sellest 1080p pildi
+process_image_multiple_faces -> võtab pildi ja tagastab listi, kus iga element on [face location within image, face chip, face vector]
+"""
 from typing import Literal
 import cv2
 import numpy as np

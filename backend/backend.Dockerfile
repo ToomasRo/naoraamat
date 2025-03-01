@@ -44,6 +44,7 @@ FROM builder AS dev-envs
 # USER app
 COPY data.json ./
 COPY .env ./
+COPY models/ /app/models
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 

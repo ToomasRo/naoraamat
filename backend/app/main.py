@@ -177,8 +177,8 @@ def find_seltsivend_sarnased(first=str, last=str):
                         "filter": {"term": {"version": "2"}},
                     },
                 },
-                source_includes=["gdrive_id"],
-                source=False,
+                # source_includes=["gdrive_id"],
+                source=True,
             )
         )
     print(f"Andmebaasist tuvastasime {len(resps)}")
@@ -210,6 +210,7 @@ def find_seltsivend_sarnased(first=str, last=str):
         if not loc in ensure_unique:
             ensure_unique.add(loc)
             response_html.append(loc)
+    print(f"XXXXXXXXXXXXXXXXXXXXXXXXXX {ensure_unique}")
 
     response_html.append("</div>  </body></html>")
     return HTMLResponse(content="\n".join(response_html), status_code=200)

@@ -1,3 +1,8 @@
+# Siseveebist kogutud piltide töötlemine ja nende andmete salvestamine elasticusse
+# Need on teada olevate nimedega pildid seega saab need laadida otse elasticusse
+
+# api key on vananenud ja ei tööta enam. korralikult .env failist tuleb sisse lugeda
+
 from elasticsearch import Elasticsearch
 import pickle
 import dlib

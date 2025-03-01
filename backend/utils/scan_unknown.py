@@ -1,3 +1,5 @@
+# Tõenäoliselt deprecated
+# image_helperis sama funktsioon olemas
 from elasticsearch import Elasticsearch
 import dlib
 import os

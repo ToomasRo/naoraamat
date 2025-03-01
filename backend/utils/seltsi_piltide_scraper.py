@@ -1,3 +1,6 @@
+# Siseveebist piltide kokku kogumiseks
+# Salvestab nimeliselt kaustadesse pildid
+
 from ast import Tuple
 import requests
 from dotenv import dotenv_values
