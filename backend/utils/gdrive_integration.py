@@ -33,14 +33,14 @@ def list_folder_recursive(drive_service, folder_id):
             drive_service.files()
             .list(
                 q=f"'{folder_id}' in parents",
-                pageSize=10,
+                pageSize=500,
                 fields="nextPageToken, files(id, name, mimeType)",
                 orderBy="createdTime",  # TODO kas see funkab
                 pageToken=page_token,
             )
             .execute()
         )
-        time.sleep(0.1)
+        time.sleep(0.5)
         items.extend(results.get("files", []))
 
         page_token = results.get("nextPageToken", None)
