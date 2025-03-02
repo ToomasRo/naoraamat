@@ -3,6 +3,7 @@
 resize_to_fhdish -> võtab 4k pildi ja teeb sellest 1080p pildi
 process_image_multiple_faces -> võtab pildi ja tagastab listi, kus iga element on [face location within image, face chip, face vector]
 """
+
 from typing import Literal
 import cv2
 import numpy as np
@@ -33,6 +34,11 @@ def resize_to_fhdish(img_array: np.ndarray | cv2.typing.MatLike):
 
     scaling_factor = min(width_scaling_factor, height_scaling_factor)
     if abs(1 - scaling_factor) < 0.25:
+        # no point in scaling down only by little
+        return img_array, 1
+    
+    # if we need to upscale then do not scale and return 
+    if scaling_factor > 1:
         return img_array, 1
 
     new_width = int(width * scaling_factor)
@@ -109,22 +115,3 @@ if __name__ == "__main__":
         suur_pilt = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     else:
         suur_pilt = cv2.imread("pilt.jpg")
-    # print("kuvan suurt pilti")
-    # # cv2.namedWindow("img")
-    # # cv2.imshow("img", suur_pilt)
-
-    # # cv2.waitKey(1000)
-    # # cv2.destroyAllWindows()
-
-    # # print(type(suur_pilt))
-    # vaike_pilt, _s = resize_to_fhdish(suur_pilt)
-    # print("kuvan väikest pilti", _s)
-    # # cv2.namedWindow("img")
-
-    # # cv2.imshow("img", vaike_pilt)
-    # # cv2.waitKey(5000)
-    # # cv2.destroyAllWindows()
-
-    # detects = detector(vaike_pilt, 1)
-    # print(len(detects))  # [0].tl_corner())
-    # ...

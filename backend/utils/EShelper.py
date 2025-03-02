@@ -19,7 +19,7 @@ config: dict = {
 }
 
 ESclient = Elasticsearch(
-    "https://host.docker.internal:9200",
+    "https://localhost:9200",
     api_key=config["ELASTIC_API_KEY"],
     verify_certs=False,
 )
@@ -27,48 +27,25 @@ ESclient = Elasticsearch(
 
 def upload_unnamed_to_elastic(
     ESclient: Elasticsearch,
-    index,
-    face_vector,
-    image_loc,
-    face_loc_img,
-    scale_factor=1.0,
-    version=1,
-):
-    resp1 = ESclient.index(
-        index=index,
-        document={
-            "face_vector": face_vector,
-            "face_location_in_image": face_loc_img,
-            "image_location": image_loc,
-            "scale_factor": scale_factor,
-            "version": version,
-        },
-    )
-    return resp1
-
-
-def upload_unnamed_to_elastic2(
-    ESclient: Elasticsearch,
     index: str,
     face_vector: list,
     face_loc_img: list,
     gdrive_id: str,
-    human_friendly_loc: str,
+    image_location: str,
     scale_factor=1.0,
     version=1,
 ):
-    resp1 = ESclient.index(
+    return ESclient.index(
         index=index,
         document={
             "face_vector": face_vector,
             "face_location_in_image": face_loc_img,
             "gdrive_id": gdrive_id,
-            "human_friendly_loc": human_friendly_loc,
+            "image_location": image_location,
             "scale_factor": scale_factor,
             "version": version,
         },
     )
-    return resp1
 
 
 def upload_named_face_to_elastic(
@@ -79,9 +56,11 @@ def upload_named_face_to_elastic(
     last_name,
     image_loc,
     face_loc_img,
+    scale_factor,
+    org,
     version=1,
 ):
-    resp1 = ESclient.index(
+    return ESclient.index(
         index=index,
         document={
             "face_vector": face_vector,
@@ -89,10 +68,11 @@ def upload_named_face_to_elastic(
             "first_name": first_name,
             "last_name": last_name,
             "image_location": image_loc,
+            "scale_factor": scale_factor,
+            "organisation": org,
             "version": version,
         },
     )
-    return resp1
 
 
 def create_unnamed_index(client: Elasticsearch):
@@ -112,7 +92,6 @@ def create_unnamed_index(client: Elasticsearch):
                 "image_location": {"type": "text"},
                 "scale_factor": {"type": "float"},
                 "gdrive_id": {"type": "text"},
-                "human_friendly_loc": {"type": "text"},
                 "version": {"type": "long"},
             }
         },
@@ -130,7 +109,7 @@ def create_named_index(client: Elasticsearch):
     )
 
     resp = client.indices.create(
-        index="named-index",
+        index="siseveeb1",
         mappings={
             "properties": {
                 "face_vector": {"type": "dense_vector", "dims": 128},
@@ -138,8 +117,10 @@ def create_named_index(client: Elasticsearch):
                 "first_name": {"type": "text"},
                 "last_name": {"type": "text"},
                 "image_location": {"type": "text"},
+                "scale_factor": {"type": "float"},
+                "organisation":{"type":"text"},
                 "version": {"type": "long"},
-            } # TODO lisada AKORG:EYS defualtina
+            }
         },
         settings=settings,
     )
@@ -150,9 +131,9 @@ def delete_index(client: Elasticsearch, index_name: str):
     return client.indices.delete(index=index_name)
 
 
-def search_elastic_siseveeb(first, last):
+def search_elastic_by_name(first, last, index="siseveeb1"):
     return ESclient.search(
-        index="named-index",
+        index=index,
         query={
             "bool": {
                 "should": [
@@ -167,17 +148,15 @@ def search_elastic_siseveeb(first, last):
     )
 
 
-def search_elastic_sarnased(first, last):
-    return ESclient.search(
-        index="named-index",
-        query={
-            "bool": {
-                "should": [
-                    {"match": {"first_name": first}},
-                    {"match": {"last_name": last}},
-                ],
-                "minimum_should_match": 2,
-            }
-        },
-        track_total_hits=True,
-    )
+def search_elastic_similarity(index, fv):
+    return  ESclient.search(
+                index=index,
+                knn={
+                    "field": "face_vector",
+                    "query_vector": fv,
+                    "k": 10,
+                    "num_candidates": 100,
+                },
+                source_includes=["image_location"],
+                source=False,
+            )
