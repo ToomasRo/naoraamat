@@ -1,5 +1,11 @@
 import os
-import time
+import json
+
+# selleks et utilsist importida
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,8 +15,8 @@ from fastapi.staticfiles import StaticFiles
 from utils import EShelper
 from utils.EShelper import ESclient
 from utils.EShelper import (
-    search_elastic_siseveeb,
-    search_elastic_sarnased,
+    search_elastic_by_name,
+    search_elastic_similarity,
     create_named_index,
     upload_named_face_to_elastic,
     create_unnamed_index,
@@ -18,6 +24,10 @@ from utils.EShelper import (
 )
 
 from utils import scan_known_faces_to_elastic, scan_unknown
+
+from pydantic import BaseModel
+from typing import List, Optional
+from fastapi import FastAPI, HTTPException, Query, Depends
 
 
 # TODO remove before prod
@@ -31,13 +41,18 @@ warnings.simplefilter("ignore", ElasticsearchWarning)
 
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="./data", html=True), name="static")
+app.mount(
+    "/static",
+    StaticFiles(
+        directory="/Users/toomas/Documents/Projects/naoraamat/backend/data/reduced"
+    ),
+    name="static",
+)
 
 
-# TODO decide what frontend
 origins = [
-    "http://localhost:4200",
-    "localhost:4200",
+    "http://localhost:5173",
+    "localhost:5173",
     "https://drive.google.com",
     "https://play.google.com",
 ]
@@ -49,6 +64,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class VectorQuery(BaseModel):
+    query_vector: List[float]
 
 
 @app.get("/")
@@ -68,182 +87,78 @@ def delete_index():
     return {"message": f"{ret}"}
 
 
-@app.get("/ingest-siseveeb")
-def ingest_siseveeb():
-    start = time.time()
-    for asi in scan_known_faces_to_elastic.directory_traversal("data/siseveeb"):
-        print(asi)
-        result = scan_known_faces_to_elastic.process_image(
-            os.path.join(*asi)
-        )  # face location within image, face chip, face vector
-        if result == 0:
-            continue
-        else:
-            print(result[0], result[2][0])
-            last_name, first_name = asi[0].split("/")[-1].split(", ")
-            x1 = int(result[0].tl_corner().x)
-            y1 = int(result[0].tl_corner().y)
-
-            x2 = int(result[0].br_corner().x)
-            y2 = int(result[0].br_corner().y)
-
-            res2 = upload_named_face_to_elastic(
-                ESclient,
-                index="named-index",
-                face_vector=list(result[2]),
-                first_name=first_name,
-                last_name=last_name,
-                image_loc=os.path.join(*asi),
-                face_loc_img=[x1, y1, x2, y2],
-            )
-            print(res2)
-
-    return {"message": f"{time.time()-start}"}
-
-
-@app.get("/find_siseveeb")
-def find_seltsivend(first=str, last=str):
-    resp = search_elastic_siseveeb(first, last)
-
-    face_vectors = []
-    for doc in resp["hits"]["hits"]:
-        face_vectors.append(doc["_source"]["face_vector"])
-
-    resps = []
-    for fv in face_vectors:
-        resps.append(
-            ESclient.search(
-                index="named-index",
-                knn={
-                    "field": "face_vector",
-                    "query_vector": fv,
-                    "k": 10,
-                    "num_candidates": 100,
-                },
-                source_includes=["image_location"],
-                source=False,
-            )
-        )
-
-    score_and_loc = []
-    for resp in resps:
-        for r in resp["hits"]["hits"]:
-            # print(r["_score"])
-            img_src = r["_source"]["image_location"]
-            static_source = "/static/siseveeb/" + "/".join(img_src.split("/")[2:])
-            score_and_loc.append([r["_score"], static_source])
-
-    score_and_loc.sort(key=lambda x: x[0], reverse=True)
-
-    print(score_and_loc)
-    response_html = [
-        '<!DOCTYPE html>\n<html>  <head><title>Photos</title></head><body><h1>Photos</h1><div class="photo">'
-    ]  # ".fit-picture {width: 250px;}"]
-    ensure_unique = set()
-    for _, loc in score_and_loc:
-        template = f'<img class="fit-picture" src="{loc}"/>'
-        if not template in ensure_unique:
-            ensure_unique.add(template)
-            response_html.append(template)
-
-    response_html.append("</div>  </body></html>")
-    return HTMLResponse(content="\n".join(response_html), status_code=200)
-
-
 @app.get("/find")
-def find_seltsivend_sarnased(first=str, last=str):
+def find_named(first: str, last: str):
+    resp = search_elastic_by_name(first, last)
+    clean = [r["_source"] for r in resp["hits"]["hits"]]
+    print(f"Found {len(clean)} matches")
+    return HTMLResponse(status_code=200, content=json.dumps(clean))
 
-    resp = search_elastic_sarnased(first, last)
 
-    face_vectors = []
-    for doc in resp["hits"]["hits"]:
-        face_vectors.append(doc["_source"]["face_vector"])
-
-    print(f"Siseveebis oli {resp['hits']['total']['value']} aluspilti")
-
-    resps = []
-    for fv in face_vectors:
-        resps.append(
-            ESclient.search(
+@app.post("/find_similar")
+def find_similar(
+    data: Optional[VectorQuery] = None,
+    first_name: Optional[str] = Query(None),
+    last_name: Optional[str] = Query(None),
+):
+    if data and (first_name or last_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either a vector or name parameters, not both",
+        )
+    if data:  # If face_vector is provided
+        fv = data.query_vector
+        faces = ESclient.search(
+            index="unnamed",
+            knn={
+                "field": "face_vector",
+                "query_vector": fv,
+                "k": 20,
+                "num_candidates": 100,
+            },
+            # source_includes=["image_location"],
+            # source=False,
+        )
+        clean = [c["hits"]["hits"] for c in faces]
+        print(f"Found {len(clean)} matches")
+        return HTMLResponse(status_code=200, content=clean)
+    elif first_name and last_name:  # TODO not needed both names technically?
+        named_response = find_named(first=first_name, last=last_name)
+        # print(named_sources.content)
+        named_sources = json.loads(named_response.body.decode())
+        fvs = [ns["face_vector"] for ns in named_sources]
+        resps = []
+        print(f"Using {len(fvs)} facevectors as ground truth.")
+        for fv in fvs:
+            matches = ESclient.search(
                 index="unnamed",
                 knn={
                     "field": "face_vector",
                     "query_vector": fv,
-                    "k": 30,
-                    "num_candidates": 200,
+                    "k": 20,
+                    "num_candidates": 100,
                 },
-                query={
-                    "bool": {
-                        "filter": {"term": {"version": "2"}},
-                    },
-                },
-                # source_includes=["gdrive_id"],
-                source=True,
+                # source_includes=["image_location", "first", "last"],
+                # source=False,
             )
+            resps.extend(matches["hits"]["hits"])
+        # remove duplicates
+        match_ids = set()
+        new_resp = []
+        for r in resps:
+            if r["_id"] not in match_ids:
+                match_ids.add(r["_id"])
+                new_resp.append(r["_source"])
+        print(f"Found {len(new_resp)} matches")
+        return HTMLResponse(status_code=200, content=json.dumps(new_resp))
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either a vector or both first_name and last_name",
         )
-    print(f"Andmebaasist tuvastasime {len(resps)}")
-    score_and_loc = []
-    for resp in resps:
-        print(resp)
-        print("----------------------------------------------")
-        for r in resp["hits"]["hits"]:
-            # esimene if on deprecated
-            if "image_location" in r["_source"]:
-                img_src = r["_source"]["image_location"]
-                static_source = "/static/" + "/".join(img_src.split("/")[2:])
-                score_and_loc.append([r["_score"], static_source])
-            elif "gdrive_id" in r["_source"]:
-                gdrive = r["_source"]["gdrive_id"]
-                static_source = f'<iframe src="https://drive.google.com/file/d/{gdrive}/preview" width="640" height="480"></iframe>'
-                score_and_loc.append([r["_score"], static_source])
-            else:
-                print(r["_source"])
-
-    score_and_loc.sort(key=lambda x: x[0], reverse=True)
-    print(f"Andmebaasist tuvastasime {len(score_and_loc)}")
-    print(score_and_loc)
-    response_html = [
-        f"""<!DOCTYPE html>\n<html>  <head><title>Photos</title></head><body><h1>Imelise {first} {last} pildid:</h1><div class="photo">"""
-    ]
-    ensure_unique = set()
-    for _, loc in score_and_loc:
-        if not loc in ensure_unique:
-            ensure_unique.add(loc)
-            response_html.append(loc)
-    print(f"XXXXXXXXXXXXXXXXXXXXXXXXXX {ensure_unique}")
-
-    response_html.append("</div>  </body></html>")
-    return HTMLResponse(content="\n".join(response_html), status_code=200)
 
 
-@app.get("/create-unnamed")
-def create_index_gdrive():
-    ret = create_unnamed_index(ESclient)
-    return {"message": f"{ret}"}
-
-
-@app.get("/ingest-local")
-def ingest_local():
-    start = time.time()
-    for asi in scan_unknown.directory_traversal(
-        "./data/pildid/reduced/2024-l/Volber - Heino Pärn"
-    ):
-        print(asi)
-        result = scan_unknown.process_image_multiple_faces(
-            os.path.join(*asi)
-        )  # face location within image, face chip, face vector
-        if result != 0:
-            for res in result:
-                print(res[0], res[2][0])
-
-                res2 = upload_unnamed_to_elastic(
-                    ESclient,
-                    index="unnamed",
-                    face_vector=list(res[2]),
-                    image_loc=os.path.join(*asi),
-                    face_loc_img=res[0],
-                    scale_factor=0.5,
-                )
-                print(res2)
-
-    return {"message": f"Aega kulus: {time.time()-start} sekundit"}
+@app.get("/find_similar")
+async def _find_similar(first: str, last: str):
+    return find_similar(first_name=first, last_name=last)
