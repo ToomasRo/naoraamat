@@ -1,0 +1,22 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dlib>=19.24.6",
+    "elasticsearch==8.15.1",
+    "fastapi[standard]>=0.115.11",
+    "google-api-python-client>=2.162.0",
+    "numpy>=2.2.3",
+    "opencv-python>=4.11.0.86",
+    "pandas>=2.2.3",
+    "python-dotenv>=1.0.1",
+    "tqdm>=4.67.1",
+]
+
+[dependency-groups]
+dev = [
+    "beautifulsoup4>=4.13.3",
+]
