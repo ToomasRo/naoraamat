@@ -68,3 +68,5 @@ dist-ssr
 node_modules
 
 frontend/public/photos
+
+backend/certs/
